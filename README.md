@@ -1,38 +1,50 @@
 # JurisFlow
 
-CRM jurídico local desenvolvido com fidelidade ao plano de estágio em Engenharia de Dados.
+CRM jurídico local para escritórios de advocacia. O JurisFlow centraliza clientes, processos, oportunidades e compromissos em uma interface única, com API própria, banco relacional e controle de acesso por perfil.
 
-## Tecnologias
+## Funcionalidades
 
-- Frontend: Next.js, React e TypeScript.
-- Backend: NestJS e TypeScript.
-- Persistência: PostgreSQL 17 e Prisma ORM.
-- Segurança: autenticação JWT, senhas com bcrypt, RBAC, Helmet e validação de entrada.
-- Qualidade: Jest, Supertest, ESLint, build automatizado e CI com PostgreSQL.
+- Cadastro, busca e atualização de clientes
+- Gestão de processos e oportunidades vinculadas
+- Agenda de prazos, audiências, reuniões e tarefas
+- Painel com indicadores e próximos compromissos
+- Importação estruturada de dados por CSV
+- Autenticação, perfis de acesso e proteção de rotas
+- Persistência local e backup dos dados
 
-O sistema não depende de hospedagem externa. O PostgreSQL é iniciado localmente pelo próprio projeto e seus arquivos ficam em `.local/postgres`.
+## Stack
 
-## Abrir no Windows
+Next.js, React e TypeScript no frontend. NestJS e TypeScript no backend. PostgreSQL 17 e Prisma ORM na persistência. JWT, bcrypt, RBAC, Helmet e validação de entrada na camada de segurança. Jest, Supertest e ESLint na qualidade.
 
-Dê dois cliques em `ABRIR_JURISFLOW_LOCAL.bat`.
+## Requisitos
 
-Na primeira execução, o iniciador prepara o PostgreSQL, aplica as migrations, cria os usuários e abre `http://localhost:3000`. Mantenha a janela aberta enquanto estiver usando o sistema.
+- Node.js 22.13 ou superior
+- npm
+- Windows, Linux ou macOS
 
-Usuário administrador inicial:
+## Instalação e execução
 
-- E-mail: `admin@jurisflow.local`
-- Senha: `JurisFlow@2026`
+```bash
+git clone https://github.com/Whoami-C/jurisflow.git
+cd jurisflow
+npm install
+npm run local
+```
 
-Também são criados um perfil de advogado e um perfil de assistente. Consulte `prisma/seed.ts` para as credenciais locais de desenvolvimento.
+A aplicação será aberta em `http://localhost:3000`. No Windows, também é possível executar `ABRIR_JURISFLOW_LOCAL.bat`.
 
-## Comandos
+Para desenvolvimento com os serviços separados:
 
-- `npm run local`: inicia banco, migrations, seed, API e interface.
-- `npm run dev`: inicia interface e API quando o PostgreSQL já está ativo.
-- `npm run db:start`: inicia somente o PostgreSQL local.
-- `npm run db:migrate:dev`: cria uma migration durante o desenvolvimento.
-- `npm run db:backup`: exporta um backup JSON em `backups/`.
-- `npm run check`: executa lint, testes unitários e builds.
-- `npm run test:e2e`: executa testes de integração contra o PostgreSQL.
+```bash
+npm run db:start
+npm run dev
+```
 
-Leia `docs/arquitetura.md`, `docs/data-dictionary.md` e `docs/runbook.md` antes de alterar o modelo ou operar dados reais.
+## Qualidade
+
+```bash
+npm run check
+npm run test:e2e
+```
+
+Consulte [`docs/arquitetura.md`](docs/arquitetura.md), [`docs/data-dictionary.md`](docs/data-dictionary.md) e [`docs/runbook.md`](docs/runbook.md) para detalhes técnicos.
