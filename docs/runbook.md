@@ -1,21 +1,41 @@
-# Runbook do JurisFlow
+# Runbook local
 
-## Verificação antes de publicar
+## Iniciar
 
-1. Instalar dependências com `npm ci`.
-2. Revisar as migrations em `drizzle/`.
-3. Executar `npm run check`.
-4. Confirmar que o binding `DB` está configurado.
-5. Verificar autenticação, isolamento por usuário e trilha de auditoria.
+1. Execute `ABRIR_JURISFLOW_LOCAL.bat`.
+2. Aguarde PostgreSQL, migration, seed, API e frontend ficarem prontos.
+3. Entre em `http://localhost:3000`.
+4. Mantenha a janela aberta.
 
-## Importação CSV
+## Encerrar
 
-O arquivo deve estar em UTF-8 e usar vírgula ou ponto e vírgula. Faça a pré-visualização, corrija registros sem nome ou com e-mail inválido e somente então confirme. Consulte o histórico para conferir quantos registros foram aceitos ou rejeitados.
+Pressione `Ctrl+C` na janela do JurisFlow. O iniciador encerra a aplicação e o PostgreSQL, preservando os dados.
 
-## Segurança e LGPD
+## Verificação
 
-O sistema reduz exposição com autenticação, separação lógica por usuário, consultas preparadas e auditoria. O escritório ainda deve definir controlador, encarregado, base legal, política de retenção, resposta a incidentes e atendimento aos direitos dos titulares.
+1. Execute `npm run check`.
+2. Com o PostgreSQL ativo, execute `npm run test:e2e`.
+3. Confirme `http://localhost:3001/api/health`.
 
-## Recuperação
+## Backup
 
-Em caso de erro de dados, interrompa novas importações, preserve os registros de auditoria e restaure a última cópia válida do banco pela plataforma de hospedagem. Não execute alterações manuais sem registrar o motivo e o responsável.
+Com o PostgreSQL ativo, execute `npm run db:backup`. O arquivo JSON é criado em `backups/` e não deve ser enviado ao repositório.
+
+## Incidente de dados
+
+Interrompa novas importações, preserve a auditoria e gere um backup antes de qualquer correção. Documente data, responsável, registros afetados e justificativa.
+
+## LGPD
+
+Antes de usar dados reais, o escritório deve definir finalidade e base legal, responsáveis, retenção, atendimento aos titulares, resposta a incidentes e periodicidade de backup. Restrinja contas administrativas e troque as senhas iniciais.
+
+## Checklist de aceite
+
+- Login válido e rejeição de senha incorreta.
+- Permissões diferentes entre administrador, advogado e assistente.
+- Criação, edição, consulta e exclusão de entidades.
+- Busca por cliente e processo.
+- Movimentação de oportunidade e tarefa por arrastar.
+- Pré-validação e importação parcial de CSV, incluindo oportunidade opcional.
+- Registro das ações na auditoria.
+- Persistência após fechar e abrir novamente.

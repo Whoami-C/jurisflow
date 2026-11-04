@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  LAWYER
+  ASSISTANT
+}
+
+enum ClientKind {
+  INDIVIDUAL
+  COMPANY
+}
+
+enum OpportunityStage {
+  NEW
+  QUALIFICATION
+  PROPOSAL
+  NEGOTIATION
+  WON
+  LOST
+}
+
+enum TaskStatus {
+  TODO
+  DOING
+  REVIEW
+  DONE
+}
+
+enum Priority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+model User {
+  id           String     @id @default(uuid()) @db.Uuid
+  name         String
+  email        String     @unique
+  passwordHash String     @map("password_hash")
+  role         Role       @default(ASSISTANT)
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+  tasks        Task[]     @relation("TaskAssignee")
+  auditLogs    AuditLog[]
+
+  @@map("users")
+}
+
+model Client {
+  id            String        @id @default(uuid()) @db.Uuid
+  kind          ClientKind
+  name          String
+  document      String?       @unique
+  email         String?
+  phone         String?
+  city          String?
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+  matters       Matter[]
+  opportunities Opportunity[]
+
+  @@index([name])
+  @@index([email])
+  @@map("clients")
+}
+
+model Opportunity {
+  id                  String           @id @default(uuid()) @db.Uuid
+  clientId            String?          @map("client_id") @db.Uuid
+  client              Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  name                String
+  contact             String?
+  area                String
+  source              String?
+  stage               OpportunityStage @default(NEW)
+  estimatedValueCents Int              @default(0) @map("estimated_value_cents")
+  nextAction          String?          @map("next_action")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  @@index([stage])
+  @@index([name])
+  @@index([clientId])
+  @@map("opportunities")
+}
+
+model Matter {
+  id         String   @id @default(uuid()) @db.Uuid
+  clientId   String?  @map("client_id") @db.Uuid
+  client     Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  title      String
+  number     String?  @unique
+  area       String
+  court      String?
+  side       String?
+  stage      String
+  status     String
+  valueCents Int      @default(0) @map("value_cents")
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  tasks      Task[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([area])
+  @@map("matters")
+}
+
+model Task {
+  id          String     @id @default(uuid()) @db.Uuid
+  matterId    String?    @map("matter_id") @db.Uuid
+  matter      Matter?    @relation(fields: [matterId], references: [id], onDelete: SetNull)
+  title       String
+  description String?
+  dueDate     DateTime   @map("due_date") @db.Date
+  dueTime     String?    @map("due_time")
+  type        String
+  priority    Priority   @default(NORMAL)
+  status      TaskStatus @default(TODO)
+  assigneeId  String?    @map("assignee_id") @db.Uuid
+  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id], onDelete: SetNull)
+  completedAt DateTime?  @map("completed_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([matterId])
+  @@index([assigneeId])
+  @@map("tasks")
+}
+
+model ImportJob {
+  id            String   @id @default(uuid()) @db.Uuid
+  fileName      String   @map("file_name")
+  entity        String
+  importedCount Int      @default(0) @map("imported_count")
+  rejectedCount Int      @default(0) @map("rejected_count")
+  status        String
+  errors        Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("import_jobs")
+}
+
+model AuditLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @map("user_id") @db.Uuid
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action    String
+  entity    String
+  entityId  String?  @map("entity_id")
+  details   Json?
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([userId])
+  @@map("audit_logs")
+}

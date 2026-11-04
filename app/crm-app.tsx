@@ -1,8 +1,5 @@
 'use client';
-/* oxlint-disable jsx-a11y/no-noninteractive-element-interactions */
-
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import {
   AlertTriangle,
   Archive,
@@ -16,7 +13,9 @@ import {
   FileText,
   LayoutDashboard,
   List,
+  LogOut,
   MoreHorizontal,
+  Pencil,
   Plus,
   Scale,
   Search,
@@ -59,6 +58,8 @@ type Client = {
 };
 type Lead = {
   id: string;
+  client_id?: string;
+  client_name?: string;
   name: string;
   contact?: string;
   area: string;
@@ -111,6 +112,12 @@ type Audit = {
   details?: string;
   created_at: string;
 };
+type CrmUser = {
+  id: string;
+  name: string;
+  email: string;
+  role: 'ADMIN' | 'LAWYER' | 'ASSISTANT';
+};
 type Data = {
   clients: Client[];
   leads: Lead[];
@@ -118,6 +125,7 @@ type Data = {
   tasks: Task[];
   imports: ImportJob[];
   audit: Audit[];
+  users: CrmUser[];
 };
 type Page =
   | 'dashboard'
@@ -135,18 +143,14 @@ type CsvRow = {
   email: string;
   phone: string;
   city: string;
+  opportunityArea: string;
+  opportunitySource: string;
+  opportunityValueCents: string;
 };
-declare global {
-  interface Document {
-    modelContext?: {
-      registerTool: (
-        tool: unknown,
-        options?: { signal: AbortSignal },
-      ) => void | Promise<void>;
-    };
-  }
-}
-
+type CsvPreview = {
+  valid: number;
+  errors: { line: number; message: string }[];
+};
 const emptyData: Data = {
   clients: [],
   leads: [],
@@ -154,6 +158,7 @@ const emptyData: Data = {
   tasks: [],
   imports: [],
   audit: [],
+  users: [],
 };
 const columns = [
   { id: 'todo', label: 'A fazer', tone: 'slate' },
@@ -191,13 +196,68 @@ const daysUntil = (date: string) =>
     (new Date(`${date}T23:59:59`).getTime() - new Date().getTime()) / 86400000,
   );
 
-export function CrmApp({ user }: { user: { name: string; email: string } }) {
+const parseDelimitedLine = (line: string, separator: string) => {
+  const values: string[] = [];
+  let current = '';
+  let quoted = false;
+  for (let index = 0; index < line.length; index += 1) {
+    const character = line[index];
+    if (character === '"') {
+      if (quoted && line[index + 1] === '"') {
+        current += '"';
+        index += 1;
+      } else quoted = !quoted;
+    } else if (character === separator && !quoted) {
+      values.push(current.trim());
+      current = '';
+    } else current += character;
+  }
+  values.push(current.trim());
+  return values;
+};
+
+const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+const entityPath: Record<Exclude<FormType, null>, string> = {
+  client: 'clients',
+  lead: 'opportunities',
+  matter: 'matters',
+  task: 'tasks',
+};
+const clientKindToApi: Record<string, string> = {
+  'Pessoa física': 'INDIVIDUAL',
+  'Pessoa jurídica': 'COMPANY',
+};
+const stageToApi: Record<string, string> = {
+  'Novo contato': 'NEW',
+  'Consulta agendada': 'QUALIFICATION',
+  'Proposta enviada': 'PROPOSAL',
+  Negociação: 'NEGOTIATION',
+  Contratado: 'WON',
+  'Não convertido': 'LOST',
+};
+const priorityToApi: Record<string, string> = {
+  Baixa: 'LOW',
+  Normal: 'NORMAL',
+  Alta: 'HIGH',
+  Urgente: 'URGENT',
+};
+
+export function CrmApp({
+  user,
+  token,
+  onLogout,
+}: {
+  user: CrmUser;
+  token: string;
+  onLogout: () => void;
+}) {
   const [data, setData] = useState<Data>(emptyData);
   const [page, setPage] = useState<Page>('dashboard');
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState('');
   const [search, setSearch] = useState('');
   const [formType, setFormType] = useState<FormType>(null);
+  const [editingId, setEditingId] = useState('');
   const [form, setForm] = useState<Record<string, string>>({});
   const [deleting, setDeleting] = useState<{
     entity: string;
@@ -207,22 +267,31 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
   const [view, setView] = useState('kanban');
   const [csvRows, setCsvRows] = useState<CsvRow[]>([]);
   const [csvName, setCsvName] = useState('');
+  const [csvPreview, setCsvPreview] = useState<CsvPreview | null>(null);
   const [dragging, setDragging] = useState('');
-  const load = useCallback(async (q = '') => {
-    setLoading(true);
-    try {
-      const res = await fetch(
-        `/api/crm${q ? `?search=${encodeURIComponent(q)}` : ''}`,
-      );
-      const body = (await res.json()) as Data & { error?: string };
-      if (!res.ok) throw new Error(body.error);
-      setData(body);
-    } catch {
-      setFeedback('Não foi possível carregar os dados. Tente novamente.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const load = useCallback(
+    async (q = '') => {
+      setLoading(true);
+      try {
+        const res = await fetch(
+          `${apiUrl}/crm${q ? `?search=${encodeURIComponent(q)}` : ''}`,
+          { headers: { Authorization: `Bearer ${token}` } },
+        );
+        if (res.status === 401) {
+          onLogout();
+          return;
+        }
+        const body = (await res.json()) as Data & { message?: string };
+        if (!res.ok) throw new Error(body.message || 'Falha ao carregar.');
+        setData(body);
+      } catch {
+        setFeedback('Não foi possível carregar os dados. Tente novamente.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [onLogout, token],
+  );
   useEffect(() => {
     void load();
   }, [load]);
@@ -231,19 +300,28 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
     window.setTimeout(() => setFeedback(''), 3500);
   };
   const request = async (
+    path: string,
     method: string,
-    body: unknown,
+    body?: unknown,
   ): Promise<Record<string, unknown>> => {
-    const res = await fetch('/api/crm', {
+    const res = await fetch(`${apiUrl}/${path}`, {
       method,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
     });
-    const result = (await res.json()) as Record<string, unknown>;
+    if (res.status === 401) onLogout();
+    const result = (await res.json()) as Record<string, unknown> & {
+      message?: string | string[];
+    };
     if (!res.ok)
       throw new Error(
-        typeof result.error === 'string'
-          ? result.error
+        Array.isArray(result.message)
+          ? result.message.join(' ')
+          : typeof result.message === 'string'
+            ? result.message
           : 'Não foi possível concluir.',
       );
     return result;
@@ -252,19 +330,61 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
     e.preventDefault();
     if (!formType) return;
     try {
-      await request('POST', {
-        entity: formType,
-        ...form,
-        valueCents: form.value
-          ? Math.round(Number(form.value.replace(/\D/g, '')))
-          : 0,
-        estimatedValueCents: form.estimatedValue
-          ? Math.round(Number(form.estimatedValue.replace(/\D/g, '')))
-          : 0,
-      });
+      const payload =
+        formType === 'client'
+          ? {
+              kind: clientKindToApi[form.kind] || 'INDIVIDUAL',
+              name: form.name,
+              document: form.document,
+              email: form.email,
+              phone: form.phone,
+              city: form.city,
+              notes: form.notes,
+            }
+          : formType === 'lead'
+            ? {
+                clientId: form.clientId,
+                name: form.name,
+                contact: form.contact,
+                area: form.area,
+                source: form.source,
+                stage: stageToApi[form.stage] || 'NEW',
+                estimatedValueCents: Math.max(
+                  0,
+                  Number(form.estimatedValue || 0),
+                ),
+                nextAction: form.nextAction,
+              }
+            : formType === 'task'
+              ? {
+                  matterId: form.matterId,
+                  title: form.title,
+                  description: form.description,
+                  dueDate: form.dueDate,
+                  dueTime: form.dueTime,
+                  type: form.type,
+                  status: (form.status || 'todo').toUpperCase(),
+                  priority: priorityToApi[form.priority] || 'NORMAL',
+                  assignee: form.assignee,
+                }
+              : {
+                  clientId: form.clientId,
+                  title: form.title,
+                  number: form.number,
+                  area: form.area,
+                  court: form.court,
+                  side: form.side,
+                  stage: form.stage,
+                  status: form.status,
+                  valueCents: Math.max(0, Number(form.value || 0)),
+                  notes: form.notes,
+                };
+      const path = `${entityPath[formType]}${editingId ? `/${editingId}` : ''}`;
+      await request(path, editingId ? 'PUT' : 'POST', payload);
       setFormType(null);
+      setEditingId('');
       setForm({});
-      notify('Cadastro salvo com segurança.');
+      notify(editingId ? 'Cadastro atualizado.' : 'Cadastro salvo com segurança.');
       await load(search);
     } catch (error) {
       notify(
@@ -279,7 +399,9 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
       tasks: d.tasks.map((t) => (t.id === id ? { ...t, status } : t)),
     }));
     try {
-      await request('PATCH', { id, status });
+      await request(`tasks/${id}/status`, 'PATCH', {
+        status: status.toUpperCase(),
+      });
       notify('Etapa da tarefa atualizada.');
       await load(search);
     } catch (error) {
@@ -294,7 +416,8 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
   const remove = async () => {
     if (!deleting) return;
     try {
-      await request('DELETE', { entity: deleting.entity, id: deleting.id });
+      const path = entityPath[deleting.entity as Exclude<FormType, null>];
+      await request(`${path}/${deleting.id}`, 'DELETE');
       setDeleting(null);
       notify('Registro removido.');
       await load(search);
@@ -306,7 +429,7 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
   };
   const demo = async () => {
     try {
-      await request('POST', { entity: 'demo' });
+      await request('demo', 'POST');
       notify('Dados sintéticos carregados.');
       await load();
     } catch (error) {
@@ -339,6 +462,7 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
     };
   }, [data, search]);
   const openForm = (type: FormType, status?: string) => {
+    setEditingId('');
     setFormType(type);
     setForm(
       type === 'task'
@@ -355,20 +479,109 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
             : { kind: 'Pessoa física' },
     );
   };
+  const openEdit = (type: Exclude<FormType, null>, value: Client | Lead | Matter | Task) => {
+    setFormType(type);
+    setEditingId(value.id);
+    if (type === 'client') {
+      const client = value as Client;
+      setForm({
+        kind: client.kind,
+        name: client.name,
+        document: client.document || '',
+        email: client.email || '',
+        phone: client.phone || '',
+        city: client.city || '',
+        notes: client.notes || '',
+      });
+    } else if (type === 'lead') {
+      const lead = value as Lead;
+      setForm({
+        clientId: lead.client_id || '',
+        name: lead.name,
+        contact: lead.contact || '',
+        area: lead.area,
+        source: lead.source || '',
+        stage: lead.stage,
+        estimatedValue: String(lead.estimated_value_cents),
+        nextAction: lead.next_action || '',
+      });
+    } else if (type === 'matter') {
+      const matter = value as Matter;
+      setForm({
+        clientId: matter.client_id || '',
+        title: matter.title,
+        number: matter.number || '',
+        area: matter.area,
+        court: matter.court || '',
+        side: matter.side || '',
+        stage: matter.stage,
+        status: matter.status,
+        value: String(matter.value_cents),
+        notes: matter.notes || '',
+      });
+    } else {
+      const task = value as Task;
+      setForm({
+        matterId: task.matter_id || '',
+        title: task.title,
+        description: task.description || '',
+        dueDate: task.due_date,
+        dueTime: task.due_time || '',
+        type: task.type,
+        priority: task.priority,
+        status: task.status,
+        assignee: task.assignee || user.name,
+      });
+    }
+  };
+  const moveOpportunity = async (id: string, stage: string) => {
+    const previous = data;
+    setData((current) => ({
+      ...current,
+      leads: current.leads.map((lead) =>
+        lead.id === id ? { ...lead, stage } : lead,
+      ),
+    }));
+    try {
+      await request(`opportunities/${id}/stage`, 'PATCH', {
+        stage: stageToApi[stage],
+      });
+      notify('Etapa da oportunidade atualizada.');
+    } catch (error) {
+      setData(previous);
+      notify(error instanceof Error ? error.message : 'Não foi possível mover.');
+    }
+  };
   const parseCsv = (file: File) => {
     setCsvName(file.name);
+    setCsvPreview(null);
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const text = (
         typeof reader.result === 'string' ? reader.result : ''
       ).replace(/^\uFEFF/, '');
+      if (!text.trim()) {
+        setCsvRows([]);
+        notify('O arquivo CSV está vazio.');
+        return;
+      }
+      if (text.includes('\uFFFD')) {
+        setCsvRows([]);
+        notify('O arquivo não está em UTF-8. Salve-o em UTF-8 e tente novamente.');
+        return;
+      }
       const lines = text.split(/\r?\n/).filter(Boolean);
+      if (lines.length > 501) {
+        setCsvRows([]);
+        notify('O arquivo excede o limite de 500 registros por importação.');
+        return;
+      }
       const sep =
         (lines[0]?.match(/;/g) || []).length >
         (lines[0]?.match(/,/g) || []).length
           ? ';'
           : ',';
-      const headers = (lines.shift() || '').split(sep).map((h) =>
+      const headers = parseDelimitedLine(lines.shift() || '', sep).map((h) =>
         h
           .trim()
           .toLowerCase()
@@ -390,11 +603,20 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
         phone: 'phone',
         cidade: 'city',
         city: 'city',
+        area_oportunidade: 'opportunityArea',
+        opportunity_area: 'opportunityArea',
+        origem_oportunidade: 'opportunitySource',
+        opportunity_source: 'opportunitySource',
+        valor_oportunidade_centavos: 'opportunityValueCents',
+        opportunity_value_cents: 'opportunityValueCents',
       };
-      const rows = lines.slice(0, 500).map((line) => {
-        const values = line
-          .split(sep)
-          .map((v) => v.trim().replace(/^"|"$/g, ''));
+      if (!headers.some((header) => aliases[header] === 'name')) {
+        setCsvRows([]);
+        notify('Cabeçalho obrigatório ausente: nome.');
+        return;
+      }
+      const rows = lines.map((line) => {
+        const values = parseDelimitedLine(line, sep);
         const row: CsvRow = {
           name: '',
           kind: 'Pessoa física',
@@ -402,6 +624,9 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
           email: '',
           phone: '',
           city: '',
+          opportunityArea: '',
+          opportunitySource: '',
+          opportunityValueCents: '',
         };
         headers.forEach((h, i) => {
           const key = aliases[h];
@@ -410,19 +635,50 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
         return row;
       });
       setCsvRows(rows);
-      notify(`${rows.length} linhas prontas para validação.`);
+      try {
+        const result = await request('imports/clients/preview', 'POST', {
+          fileName: file.name,
+          rows: rows.map((row) => ({
+            ...row,
+            kind: clientKindToApi[row.kind] || 'INDIVIDUAL',
+            opportunityValueCents: row.opportunityValueCents
+              ? Number(row.opportunityValueCents)
+              : undefined,
+          })),
+        });
+        const preview: CsvPreview = {
+          valid: Number(result.valid ?? 0),
+          errors: Array.isArray(result.errors)
+            ? (result.errors as CsvPreview['errors'])
+            : [],
+        };
+        setCsvPreview(preview);
+        notify(
+          `${preview.valid} linhas válidas; ${preview.errors.length} com erro.`,
+        );
+      } catch (error) {
+        setCsvPreview(null);
+        notify(error instanceof Error ? error.message : 'Falha na validação.');
+      }
     };
+    reader.onerror = () => notify('Não foi possível ler o arquivo selecionado.');
     reader.readAsText(file, 'UTF-8');
   };
   const importCsv = async () => {
     try {
-      const result = await request('POST', {
-        entity: 'importClients',
+      const result = await request('imports/clients', 'POST', {
         fileName: csvName,
-        rows: csvRows,
+        rows: csvRows.map((row) => ({
+          ...row,
+          kind: clientKindToApi[row.kind] || 'INDIVIDUAL',
+          opportunityValueCents: row.opportunityValueCents
+            ? Number(row.opportunityValueCents)
+            : undefined,
+        })),
       });
       setCsvRows([]);
       setCsvName('');
+      setCsvPreview(null);
       notify(
         `${Number(result.imported ?? 0)} clientes importados; ${Number(result.rejected ?? 0)} rejeitados.`,
       );
@@ -431,59 +687,6 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
       notify(error instanceof Error ? error.message : 'Falha na importação.');
     }
   };
-  useEffect(() => {
-    const ctx = document.modelContext;
-    if (!ctx?.registerTool) return;
-    const lifecycle = new AbortController();
-    void Promise.resolve(
-      ctx.registerTool(
-        {
-          name: 'create_legal_task',
-          title: 'Criar tarefa jurídica',
-          description: 'Cria uma tarefa ou prazo jurídico no JurisFlow.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              title: { type: 'string' },
-              dueDate: { type: 'string', description: 'Data em YYYY-MM-DD' },
-              priority: {
-                type: 'string',
-                enum: ['Urgente', 'Alta', 'Normal', 'Baixa'],
-              },
-            },
-            required: ['title', 'dueDate'],
-            additionalProperties: false,
-          },
-          annotations: { readOnlyHint: false, untrustedContentHint: false },
-          execute: async (input: unknown) => {
-            const value = input as {
-              title: string;
-              dueDate: string;
-              priority?: string;
-            };
-            if (!value.title || !/^\d{4}-\d{2}-\d{2}$/.test(value.dueDate))
-              throw new Error('Título e data válida são obrigatórios.');
-            const result = await request('POST', {
-              entity: 'task',
-              title: value.title,
-              dueDate: value.dueDate,
-              priority: value.priority || 'Normal',
-              status: 'todo',
-              type: 'Tarefa',
-            });
-            await load();
-            return {
-              id: typeof result.id === 'string' ? result.id : '',
-              status: 'created',
-            };
-          },
-        },
-        { signal: lifecycle.signal },
-      ),
-    ).catch(() => {});
-    return () => lifecycle.abort();
-  }, [load]);
-
   return (
     <main className="app-shell">
       <aside className="app-sidebar">
@@ -494,7 +697,13 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
           <strong>JurisFlow</strong>
         </div>
         <nav>
-          {nav.map(([id, label, Icon]) => (
+          {nav
+            .filter(
+              ([id]) =>
+                (id !== 'audit' || user.role === 'ADMIN') &&
+                (id !== 'imports' || user.role !== 'ASSISTANT'),
+            )
+            .map(([id, label, Icon]) => (
             <button
               key={id}
               className={page === id ? 'active' : ''}
@@ -504,7 +713,7 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
               {label}
               {id === 'tasks' && week.length > 0 ? <b>{week.length}</b> : null}
             </button>
-          ))}
+            ))}
         </nav>
         <div className="privacy-note">
           <ShieldCheck />
@@ -517,11 +726,17 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
           <div>{initials(user.name)}</div>
           <span>
             <strong>{user.name}</strong>
-            <small>Administrador</small>
+            <small>
+              {user.role === 'ADMIN'
+                ? 'Administrador'
+                : user.role === 'LAWYER'
+                  ? 'Advogado'
+                  : 'Assistente'}
+            </small>
           </span>
-          <Link href="/signout-with-chatgpt?return_to=/" title="Sair">
-            ↗
-          </Link>
+          <button className="profile-logout" onClick={onLogout} title="Sair">
+            <LogOut />
+          </button>
         </div>
       </aside>
       <section className="workspace">
@@ -583,13 +798,14 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
           <form onSubmit={save}>
             <DialogHeader>
               <DialogTitle>
+                {editingId ? 'Editar ' : 'Novo '}
                 {formType === 'client'
-                  ? 'Novo cliente'
+                  ? 'cliente'
                   : formType === 'lead'
-                    ? 'Nova oportunidade'
+                    ? 'oportunidade'
                     : formType === 'matter'
-                      ? 'Novo processo'
-                      : 'Novo prazo ou tarefa'}
+                      ? 'processo'
+                      : 'prazo ou tarefa'}
               </DialogTitle>
               <DialogDescription>
                 Preencha os campos essenciais. Você poderá complementar as
@@ -772,6 +988,12 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
     return (
       <div className="form-grid">
         {input('name', 'Nome do potencial cliente', 'text', true, true)}
+        {select(
+          'clientId',
+          'Cliente já cadastrado',
+          data.clients.map((client) => [client.id, client.name] as [string, string]),
+          false,
+        )}
         {input('contact', 'Telefone ou e-mail')}
         {select('area', 'Área de interesse', [
           'Cível',
@@ -792,6 +1014,7 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
           'Novo contato',
           'Consulta agendada',
           'Proposta enviada',
+          'Negociação',
           'Contratado',
           'Não convertido',
         ])}
@@ -831,7 +1054,12 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
           'Etapa',
           columns.map((c) => [c.id, c.label] as [string, string]),
         )}
-        {input('assignee', 'Responsável')}
+        {select(
+          'assignee',
+          'Responsável',
+          data.users.map((member) => [member.name, member.name] as [string, string]),
+          false,
+        )}
         {textarea('description', 'Descrição e próximos passos')}
       </div>
     );
@@ -1027,7 +1255,9 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
       'Novo contato',
       'Consulta agendada',
       'Proposta enviada',
+      'Negociação',
       'Contratado',
+      'Não convertido',
     ];
     return (
       <>
@@ -1043,7 +1273,15 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
         />
         <div className="lead-board">
           {stages.map((stage) => (
-            <section className="lead-column" key={stage}>
+            <section
+              className={`lead-column ${dragging ? 'drag-active' : ''}`}
+              key={stage}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={() => {
+                if (dragging) void moveOpportunity(dragging, stage);
+                setDragging('');
+              }}
+            >
               <div className="column-title">
                 <span>
                   <i className="dot blue-dot" />
@@ -1056,22 +1294,37 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
               {data.leads
                 .filter((lead) => lead.stage === stage)
                 .map((lead) => (
-                  <article className="lead-card" key={lead.id}>
+                  <article
+                    className="lead-card"
+                    key={lead.id}
+                    draggable
+                    onDragStart={() => setDragging(lead.id)}
+                    onDragEnd={() => setDragging('')}
+                  >
                     <div className="card-top">
                       <span className="matter-area">{lead.area}</span>
-                      <button
-                        className="icon-action danger-action"
-                        aria-label={`Excluir ${lead.name}`}
-                        onClick={() =>
-                          setDeleting({
-                            entity: 'lead',
-                            id: lead.id,
-                            label: lead.name,
-                          })
-                        }
-                      >
-                        <X />
-                      </button>
+                      <span className="card-actions">
+                        <button
+                          className="icon-action"
+                          aria-label={`Editar ${lead.name}`}
+                          onClick={() => openEdit('lead', lead)}
+                        >
+                          <Pencil />
+                        </button>
+                        <button
+                          className="icon-action danger-action"
+                          aria-label={`Excluir ${lead.name}`}
+                          onClick={() =>
+                            setDeleting({
+                              entity: 'lead',
+                              id: lead.id,
+                              label: lead.name,
+                            })
+                          }
+                        >
+                          <X />
+                        </button>
+                      </span>
                     </div>
                     <h3>{lead.name}</h3>
                     <p>{lead.contact || 'Contato não informado'}</p>
@@ -1141,7 +1394,14 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
                       <span className="status-chip">{c.kind}</span>
                     </td>
                     <td>{c.matter_count}</td>
-                    <td>
+                    <td className="card-actions">
+                      <button
+                        className="icon-action"
+                        aria-label={`Editar ${c.name}`}
+                        onClick={() => openEdit('client', c)}
+                      >
+                        <Pencil />
+                      </button>
                       <button
                         className="icon-action danger-action"
                         aria-label={`Excluir ${c.name}`}
@@ -1202,18 +1462,28 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
               <article className="matter-card" key={m.id}>
                 <div className="card-top">
                   <span className="status-chip">{m.status}</span>
-                  <button
-                    className="icon-action danger-action"
-                    onClick={() =>
-                      setDeleting({
-                        entity: 'matter',
-                        id: m.id,
-                        label: m.title,
-                      })
-                    }
-                  >
-                    <X />
-                  </button>
+                  <span className="card-actions">
+                    <button
+                      className="icon-action"
+                      aria-label={`Editar ${m.title}`}
+                      onClick={() => openEdit('matter', m)}
+                    >
+                      <Pencil />
+                    </button>
+                    <button
+                      className="icon-action danger-action"
+                      aria-label={`Excluir ${m.title}`}
+                      onClick={() =>
+                        setDeleting({
+                          entity: 'matter',
+                          id: m.id,
+                          label: m.title,
+                        })
+                      }
+                    >
+                      <X />
+                    </button>
+                  </span>
                 </div>
                 <span className="matter-area">
                   {m.area} · {m.side || 'Polo não informado'}
@@ -1345,15 +1615,24 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
           >
             {task.priority}
           </span>
-          <button
-            className="icon-action"
-            aria-label={`Ações de ${task.title}`}
-            onClick={() =>
-              setDeleting({ entity: 'task', id: task.id, label: task.title })
-            }
-          >
-            <MoreHorizontal />
-          </button>
+          <span className="card-actions">
+            <button
+              className="icon-action"
+              aria-label={`Editar ${task.title}`}
+              onClick={() => openEdit('task', task)}
+            >
+              <Pencil />
+            </button>
+            <button
+              className="icon-action danger-action"
+              aria-label={`Excluir ${task.title}`}
+              onClick={() =>
+                setDeleting({ entity: 'task', id: task.id, label: task.title })
+              }
+            >
+              <MoreHorizontal />
+            </button>
+          </span>
         </div>
         <h3>{task.title}</h3>
         <p>{task.matter_title || 'Atividade geral'}</p>
@@ -1409,8 +1688,8 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
             <h2>Importar clientes</h2>
             <p>
               Use CSV em UTF-8, separado por vírgula ou ponto e vírgula.
-              Cabeçalhos aceitos: nome, tipo, CPF/CNPJ, e-mail, telefone e
-              cidade.
+              Cabeçalhos aceitos: nome, tipo, CPF/CNPJ, e-mail, telefone,
+              cidade e os campos opcionais de oportunidade.
             </p>
             <label className="file-button">
               <Upload />
@@ -1427,7 +1706,7 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
               className="text-action"
               onClick={() => {
                 const content =
-                  'nome;tipo;cpf;email;telefone;cidade\nMaria Souza;Pessoa física;000.000.000-00;maria@example.com;(65) 99999-0000;Cuiabá';
+                  'nome;tipo;cpf;email;telefone;cidade;area_oportunidade;origem_oportunidade;valor_oportunidade_centavos\nMaria Souza;Pessoa física;529.982.247-25;maria@example.com;(65) 99999-0000;Cuiabá;Cível;Indicação;150000';
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(
                   new Blob([content], { type: 'text/csv' }),
@@ -1450,12 +1729,18 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
                 </h2>
                 <p>
                   {csvRows.length
-                    ? `${csvRows.length} registros serão validados no servidor.`
+                    ? csvPreview
+                      ? `${csvPreview.valid} válidos · ${csvPreview.errors.length} com erro. Apenas os válidos serão gravados.`
+                      : 'Validando os registros no servidor local...'
                     : 'Últimos arquivos processados.'}
                 </p>
               </div>
               {csvRows.length ? (
-                <button className="primary-action" onClick={importCsv}>
+                <button
+                  className="primary-action"
+                  disabled={!csvPreview || csvPreview.valid === 0}
+                  onClick={importCsv}
+                >
                   Confirmar importação
                 </button>
               ) : null}
@@ -1468,6 +1753,7 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
                       <th>Nome</th>
                       <th>Documento</th>
                       <th>E-mail</th>
+                      <th>Validação</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1478,6 +1764,10 @@ export function CrmApp({ user }: { user: { name: string; email: string } }) {
                         </td>
                         <td>{r.document || '—'}</td>
                         <td>{r.email || '—'}</td>
+                        <td>
+                          {csvPreview?.errors.find((error) => error.line === i + 2)
+                            ?.message || (csvPreview ? 'Válido' : 'Validando...')}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
