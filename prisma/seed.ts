@@ -15,7 +15,7 @@ async function upsertUser(name: string, email: string, role: Role, password: str
 async function main() {
   await upsertUser(
     'Administrador JurisFlow',
-    'admin@jurisflow.local',
+    process.env.SEED_ADMIN_EMAIL ?? 'admin@jurisflow.local',
     Role.ADMIN,
     process.env.SEED_ADMIN_PASSWORD ?? 'JurisFlow@2026',
   );

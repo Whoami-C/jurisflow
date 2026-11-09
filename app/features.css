@@ -183,9 +183,19 @@
 }
 .app-sidebar nav button:hover,
 .app-sidebar nav button.active {
-  background: #204556;
+  background: #2b443f;
   color: #fff;
 }
+.app-sidebar nav button { position: relative; overflow: hidden; transition: background-color 180ms ease, color 180ms ease, padding-left 180ms cubic-bezier(.2,.75,.25,1); }
+.app-sidebar nav button:hover { padding-left: 16px; }
+.app-sidebar nav button.active::before { position: absolute; inset: 9px auto 9px 3px; width: 2px; border-radius: 2px; background: var(--sidebar-primary); content: ""; }
+.app-sidebar nav button svg { transition: transform 180ms cubic-bezier(.2,.75,.25,1); }
+.app-sidebar nav button:hover svg { transform: scale(1.08); }
+.app-sidebar nav button { position: relative; overflow: hidden; transition: background-color 180ms ease, color 180ms ease, padding-left 180ms cubic-bezier(.2,.75,.25,1); }
+.app-sidebar nav button:hover { padding-left: 16px; }
+.app-sidebar nav button.active::before { position: absolute; inset: 9px auto 9px 3px; width: 2px; border-radius: 2px; background: var(--sidebar-primary); content: ''; }
+.app-sidebar nav button svg { transition: transform 180ms cubic-bezier(.2,.75,.25,1); }
+.app-sidebar nav button:hover svg { transform: scale(1.08); }
 .app-sidebar nav button b {
   margin-left: auto;
   background: #d1a64d;
@@ -276,6 +286,9 @@
   box-shadow: 0 12px 35px rgb(5 28 39 / 22%);
   font-size: 0.84rem;
 }
+@keyframes toast-arrive { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
+.toast-message { animation: toast-arrive 240ms cubic-bezier(.2,.8,.2,1) both; }
+@keyframes toast-arrive { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .toast-message > svg {
   width: 18px;
   color: #89cbb0;
@@ -311,8 +324,10 @@
   background: #fff;
   border: 1px solid #dfe5e8;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgb(21 40 53 / 3%);
+  box-shadow: 0 2px 8px rgb(21 40 53 / 2%);
+  transition: border-color 180ms ease, box-shadow 220ms ease;
 }
+.surface:hover, .table-surface:hover { border-color: #d1d8d1; box-shadow: 0 8px 24px rgb(36 58 48 / 5%); }
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1.15fr 1fr;
@@ -759,6 +774,11 @@
 .metrics article {
   min-width: 0;
 }
+.brand > span { transition: transform 280ms cubic-bezier(.2,.8,.2,1); }
+.brand:hover > span { transform: rotate(-8deg) scale(1.05); }
+button, a, input, select, textarea { transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 180ms ease, transform 180ms cubic-bezier(.2,.75,.25,1); }
+.primary-action:hover, .secondary-action:hover, .outline-action:hover { transform: translateY(-1px); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
 .metrics article > div {
   min-width: 0;
 }
@@ -841,3 +861,10 @@
     grid-template-columns: 1fr;
   }
 }
+
+.brand > span { transition: transform 280ms cubic-bezier(.2,.8,.2,1); }
+.brand:hover > span { transform: rotate(-8deg) scale(1.05); }
+button, a, input, select, textarea { transition: color 160ms ease, background-color 160ms ease, border-color 160ms ease, box-shadow 180ms ease, transform 180ms cubic-bezier(.2,.75,.25,1); }
+.primary-action:hover, .secondary-action:hover, .outline-action:hover { transform: translateY(-1px); }
+.surface:hover, .table-surface:hover { border-color: #d1d8d1; box-shadow: 0 8px 24px rgb(36 58 48 / 5%); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

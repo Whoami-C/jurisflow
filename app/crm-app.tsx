@@ -195,6 +195,20 @@ const daysUntil = (date: string) =>
   Math.ceil(
     (new Date(`${date}T23:59:59`).getTime() - new Date().getTime()) / 86400000,
   );
+const normalizeSearch = (value: unknown) =>
+  String(value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLocaleLowerCase('pt-BR')
+    .replace(/[^\p{L}\p{N}@.]+/gu, ' ')
+    .trim();
+const matchesSearch = (value: unknown, query: string) => {
+  const text = normalizeSearch(value);
+  return normalizeSearch(query)
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((term) => text.includes(term));
+};
 
 const parseDelimitedLine = (line: string, separator: string) => {
   const values: string[] = [];
@@ -256,6 +270,7 @@ export function CrmApp({
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState('');
   const [search, setSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
   const [formType, setFormType] = useState<FormType>(null);
   const [editingId, setEditingId] = useState('');
   const [form, setForm] = useState<Record<string, string>>({});
@@ -451,16 +466,24 @@ export function CrmApp({
   );
   const active = data.matters.filter((m) => m.status !== 'Encerrado');
   const filtered = useMemo(() => {
-    const q = search.toLowerCase();
+    const q = normalizeSearch(search);
+    const clientText = (c: Client) => [c.name, c.kind, c.document, c.email, c.phone, c.city, c.notes, ...data.matters.filter((m) => m.client_id === c.id).flatMap((m) => [m.title, m.number, m.area, m.court, m.side, m.stage, m.status, m.notes]), ...data.tasks.filter((t) => data.matters.some((m) => m.id === t.matter_id && m.client_id === c.id)).flatMap((t) => [t.title, t.description, t.type, t.priority, t.status, t.assignee, t.due_date])].join(' ');
+    const matterText = (m: Matter) => [m.title, m.number, m.area, m.court, m.side, m.stage, m.status, m.notes, m.client_name, ...data.tasks.filter((t) => t.matter_id === m.id).flatMap((t) => [t.title, t.description, t.type, t.priority, t.status, t.assignee, t.due_date])].join(' ');
     return {
-      clients: data.clients.filter((c) =>
-        Object.values(c).join(' ').toLowerCase().includes(q),
-      ),
-      matters: data.matters.filter((m) =>
-        Object.values(m).join(' ').toLowerCase().includes(q),
-      ),
+      clients: data.clients.filter((c) => matchesSearch(clientText(c), q)),
+      matters: data.matters.filter((m) => matchesSearch(matterText(m), q)),
+      suggestions: [
+        ...data.clients.filter((c) => matchesSearch(clientText(c), q)).map((c) => ({ id: c.id, label: c.name, detail: `Cliente · ${c.city || c.kind}`, page: 'clients' as Page })),
+        ...data.matters.filter((m) => matchesSearch(matterText(m), q)).map((m) => ({ id: m.id, label: m.title, detail: `Processo · ${m.client_name || m.area}`, page: 'matters' as Page })),
+        ...data.tasks.filter((t) => matchesSearch([t.title, t.description, t.type, t.priority, t.status, t.assignee, t.due_date, t.matter_title].join(' '), q)).map((t) => ({ id: t.id, label: t.title, detail: `Prazo · ${t.matter_title || t.type}`, page: 'tasks' as Page })),
+      ].slice(0, 7),
     };
   }, [data, search]);
+  useEffect(() => {
+    if (!search.trim()) return;
+    const timer = window.setTimeout(() => void load(search), 180);
+    return () => window.clearTimeout(timer);
+  }, [load, search]);
   const openForm = (type: FormType, status?: string) => {
     setEditingId('');
     setFormType(type);
@@ -708,6 +731,7 @@ export function CrmApp({
               key={id}
               className={page === id ? 'active' : ''}
               onClick={() => setPage(id)}
+              aria-current={page === id ? 'page' : undefined}
             >
               <Icon />
               {label}
@@ -741,16 +765,30 @@ export function CrmApp({
       </aside>
       <section className="workspace">
         <header className="topbar">
-          <label className="global-search">
+          <label className={`global-search ${searchFocused ? 'is-focused' : ''}`}>
             <Search />
             <input
               aria-label="Buscar"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && void load(search)}
-              placeholder="Buscar cliente, processo ou tarefa..."
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => window.setTimeout(() => setSearchFocused(false), 140)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (filtered.suggestions[0]) setPage(filtered.suggestions[0].page);
+                  else void load(search);
+                  setSearchFocused(false);
+                }
+                if (e.key === 'Escape') { setSearch(''); setSearchFocused(false); }
+              }}
+              placeholder="Busque por nome, assunto, cidade, prazo..."
             />
-            <kbd>↵</kbd>
+            {search ? <button type="button" className="search-clear" aria-label="Limpar busca" onMouseDown={(e) => e.preventDefault()} onClick={() => setSearch('')}>×</button> : <kbd>↵</kbd>}
+            {searchFocused && normalizeSearch(search).length > 1 ? <div className="search-suggestions" role="listbox" aria-label="Resultados da busca">
+              {filtered.suggestions.length ? filtered.suggestions.map((item) => <button type="button" role="option" key={`${item.page}-${item.id}`} onMouseDown={(e) => e.preventDefault()} onClick={() => { setPage(item.page); setSearchFocused(false); }}><span><strong>{item.label}</strong><small>{item.detail}</small></span><span aria-hidden="true">↗</span></button>) : <p>Nenhum resultado relacionado encontrado.</p>}
+              <small className="search-hint">Busca em nomes, contatos, assuntos, etapas e prazos</small>
+            </div> : null}
           </label>
           <button
             className="primary-action"
@@ -786,7 +824,7 @@ export function CrmApp({
               <span />
             </div>
           ) : (
-            renderPage()
+            <div key={page} className="page-transition">{renderPage()}</div>
           )}
         </div>
       </section>
@@ -1136,7 +1174,7 @@ export function CrmApp({
           }
         />
         <div className="metrics">
-          <article>
+          <article style={{ '--stagger': '0ms' } as React.CSSProperties}>
             <span className="metric-icon navy">
               <BriefcaseBusiness />
             </span>
@@ -1149,7 +1187,7 @@ export function CrmApp({
               </em>
             </div>
           </article>
-          <article>
+          <article style={{ '--stagger': '70ms' } as React.CSSProperties}>
             <span className="metric-icon blue">
               <Users />
             </span>
@@ -1159,7 +1197,7 @@ export function CrmApp({
               <em>Base centralizada</em>
             </div>
           </article>
-          <article>
+          <article style={{ '--stagger': '140ms' } as React.CSSProperties}>
             <span className="metric-icon amber">
               <Clock3 />
             </span>
@@ -1169,7 +1207,7 @@ export function CrmApp({
               <em>{overdue.length} vencidos</em>
             </div>
           </article>
-          <article>
+          <article style={{ '--stagger': '210ms' } as React.CSSProperties}>
             <span className="metric-icon green">
               <CheckCircle2 />
             </span>

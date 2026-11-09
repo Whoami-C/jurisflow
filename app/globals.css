@@ -3,33 +3,53 @@
 @import './features.css';
 
 :root {
-  --background: #f5f7f8;
-  --foreground: #172231;
+  --background: #f3f4f1;
+  --foreground: #202b2b;
+  --primary: #254641;
+  --secondary: #eceeeb;
+  --secondary-foreground: #254641;
+  --muted: #eceeeb;
+  --muted-foreground: #707a74;
+  --accent: #e5ebe6;
+  --accent-foreground: #254641;
+  --border: #e0e2dd;
+  --input: #e0e2dd;
+  --ring: #728b7b;
+  --sidebar: #1b302d;
+  --sidebar-primary: #c59e62;
+  --sidebar-accent: #2b443f;
+  --sidebar-border: #334742;
+  --sidebar-ring: #c59e62;
+}
+
+:root {
+  --background: #f3f4f1;
+  --foreground: #202b2b;
   --card: #fff;
   --card-foreground: #172231;
   --popover: #fff;
   --popover-foreground: #172231;
-  --primary: #183a4f;
+  --primary: #254641;
   --primary-foreground: #fff;
-  --secondary: #eef2f4;
-  --secondary-foreground: #183a4f;
-  --muted: #eef2f4;
-  --muted-foreground: #647180;
-  --accent: #e7eff3;
-  --accent-foreground: #183a4f;
+  --secondary: #eceeeb;
+  --secondary-foreground: #254641;
+  --muted: #eceeeb;
+  --muted-foreground: #707a74;
+  --accent: #e5ebe6;
+  --accent-foreground: #254641;
   --destructive: #b34242;
-  --border: #dfe5e8;
-  --input: #dfe5e8;
-  --ring: #3c718d;
+  --border: #e0e2dd;
+  --input: #e0e2dd;
+  --ring: #728b7b;
   --radius: 0.7rem;
-  --sidebar: #102d3d;
+  --sidebar: #1b302d;
   --sidebar-foreground: #dce8ed;
-  --sidebar-primary: #d2a74b;
+  --sidebar-primary: #c59e62;
   --sidebar-primary-foreground: #102d3d;
-  --sidebar-accent: #204456;
+  --sidebar-accent: #2b443f;
   --sidebar-accent-foreground: #fff;
-  --sidebar-border: #294959;
-  --sidebar-ring: #d2a74b;
+  --sidebar-border: #334742;
+  --sidebar-ring: #c59e62;
 }
 @theme inline {
   --color-background: var(--background);
@@ -70,7 +90,11 @@ body {
     'Segoe UI',
     sans-serif;
   font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  font-optical-sizing: auto;
 }
+.page-transition { animation: page-arrive 420ms cubic-bezier(.2,.75,.25,1) both; }
+@keyframes page-arrive { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 .app-shell {
   min-height: 100vh;
   display: flex;
@@ -79,7 +103,7 @@ body {
   position: fixed;
   inset: 0 auto 0 0;
   width: 244px;
-  background: #102d3d;
+  background: #1b302d;
   color: #c8d7de;
   padding: 24px 16px;
   display: flex;
@@ -100,7 +124,7 @@ body {
   width: 34px;
   height: 34px;
   border-radius: 10px;
-  background: #d1a64d;
+  background: #c59e62;
   color: #102d3d;
 }
 .brand strong {
@@ -127,12 +151,12 @@ body {
 }
 .app-sidebar nav a:hover,
 .app-sidebar nav a.active {
-  background: #204556;
+  background: #2b443f;
   color: #fff;
 }
 .app-sidebar nav b {
   margin-left: auto;
-  background: #d1a64d;
+  background: #c59e62;
   color: #102d3d;
   border-radius: 12px;
   padding: 2px 7px;
@@ -151,7 +175,7 @@ body {
   display: grid;
   place-items: center;
   border-radius: 50%;
-  background: #d1a64d;
+  background: #c59e62;
   color: #17394b;
   font-size: 0.72rem;
   font-weight: 800;
@@ -182,6 +206,7 @@ body {
   justify-content: space-between;
 }
 .global-search {
+  position: relative;
   width: min(520px, 65%);
   display: flex;
   align-items: center;
@@ -192,6 +217,7 @@ body {
   padding: 0 12px;
   color: #73808c;
 }
+.global-search.is-focused { border-color: #91a699; background: #fff; box-shadow: 0 0 0 3px rgb(91 123 102 / 10%); }
 .global-search svg {
   width: 18px;
 }
@@ -210,6 +236,17 @@ body {
   border-radius: 5px;
   padding: 3px 6px;
 }
+.search-clear { flex: 0 0 auto; border: 0; background: transparent; color: #708078; font-size: 1.15rem; line-height: 1; cursor: pointer; }
+.search-suggestions { position: absolute; z-index: 50; top: calc(100% + 9px); left: 0; width: min(560px, calc(100vw - 32px)); max-height: min(430px, 70vh); overflow: auto; padding: 7px; border: 1px solid #e0e4df; border-radius: 13px; background: #fff; box-shadow: 0 18px 44px rgb(28 46 39 / 14%); animation: search-drop 170ms cubic-bezier(.2,.75,.25,1) both; }
+.search-suggestions > button { display: flex; width: 100%; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 0; border-radius: 8px; background: transparent; color: #25332f; cursor: pointer; text-align: left; }
+.search-suggestions > button:hover, .search-suggestions > button:focus-visible { background: #f0f3ef; outline: none; }
+.search-suggestions > button strong, .search-suggestions > button small { display: block; }
+.search-suggestions > button strong { font-size: .84rem; font-weight: 620; }
+.search-suggestions > button small { margin-top: 3px; color: #77827c; font-size: .72rem; }
+.search-suggestions > button > span:last-child { color: #8b9b91; }
+.search-suggestions > p, .search-hint { display: block; margin: 0; padding: 10px 12px; color: #78837d; font-size: .76rem; }
+.search-hint { border-top: 1px solid #edf0ec; font-size: .68rem; }
+@keyframes search-drop { from { opacity: 0; transform: translateY(-5px) scale(.99); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .primary-action,
 .outline-action,
 .segmented button {
@@ -219,7 +256,7 @@ body {
   cursor: pointer;
 }
 .primary-action {
-  background: #183a4f;
+  background: #254641;
   color: #fff;
   padding: 10px 17px;
 }
@@ -253,7 +290,7 @@ body {
 }
 .page-heading h1 {
   font-family: Georgia, serif;
-  font-size: 2rem;
+  font-size: clamp(2rem, 2.5vw, 2.5rem);
   letter-spacing: -0.035em;
   margin: 7px 0 5px;
 }
@@ -272,12 +309,17 @@ body {
 .metrics article {
   background: #fff;
   border: 1px solid #e0e5e8;
-  border-radius: 12px;
-  padding: 18px;
+  border-radius: 14px;
+  padding: 20px;
   display: flex;
   gap: 13px;
-  box-shadow: 0 2px 8px rgb(21 40 53 / 3%);
+  box-shadow: 0 2px 8px rgb(21 40 53 / 2%);
+  animation: metric-arrive 580ms cubic-bezier(.2,.75,.25,1) both;
+  animation-delay: var(--stagger, 0ms);
+  transition: transform 220ms cubic-bezier(.2,.75,.25,1), box-shadow 220ms ease, border-color 220ms ease;
 }
+.metrics article:hover { transform: translateY(-3px); border-color: #ccd4cd; box-shadow: 0 12px 28px rgb(36 58 48 / 8%); }
+@keyframes metric-arrive { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 .metric-icon {
   width: 38px;
   height: 38px;
